@@ -34,7 +34,6 @@ async function main() {
 	if (!list.length) return console.log("Файл config.txt пуст");
 
 	let config = {};
-	// let cardsLength = configContent.includes("Lightning Roulette") ? 1 : 0;
 	let cardsLength = 0;
 	let token = null;
 	let chatId = null;
@@ -99,55 +98,62 @@ async function main() {
 
 	emitter.on("complete", async (result) => {
 		if (!result.length) return console.log("Нет данных");
+		try {
+			let resultMessage = "Подходящие карточки:";
+			for (const game in games) {
+				const { url, cards } = games[game];
+				const gameResult = result.filter((item) => item.game === game);
+				resultMessage += `\nИгра: <b><a href="${url}">${game}</a></b>`;
+				let isCardFinded = false;
 
-		let resultMessage = "Подходящие карточки:";
-		for (const game in games) {
-			const { url, cards } = games[game];
-			const gameResult = result.filter((item) => item.game === game);
-			resultMessage += `\nИгра: <b><a href="${url}">${game}</a></b>`;
-			let isCardFinded = false;
+				for (let i = 0; i < cards.length; i++) {
+					const card = cards[i];
 
-			for (let i = 0; i < cards.length; i++) {
-				const card = cards[i];
+					let { name, limit } = card;
 
-				let { name, limit } = card;
+					let cardPercent = gameResult.find((item) => item[name]);
 
-				let cardPercent = gameResult.find((item) => item[name])[name];
+					if (!cardPercent) continue;
 
-				limit = parseFloat(limit);
-				cardPercent = parseFloat(cardPercent);
+					cardPercent = cardPercent[name];
 
-				if (cardPercent < limit) {
-					isCardFinded = true;
-					resultMessage += `\nКарточка: "<b>${name}</b>" Желаемый: <b>${cardPercent}%</b>`;
-					// console.log(
-					// 	`Игра: ${game} Карточка:${name} Желаемый: ${cardPercent}%`,
-					// );
+					limit = parseFloat(limit);
+					cardPercent = parseFloat(cardPercent);
+
+					if (cardPercent < limit) {
+						isCardFinded = true;
+						resultMessage += `\nКарточка: "<b>${name}</b>" Желаемый: <b>${cardPercent}%</b>`;
+						// console.log(
+						// 	`Игра: ${game} Карточка:${name} Желаемый: ${cardPercent}%`,
+						// );
+					}
+				}
+
+				if (!isCardFinded) {
+					resultMessage = resultMessage.replace(
+						`\nИгра: <b><a href="${url}">${game}</a></b>`,
+						"",
+					);
 				}
 			}
-
-			if (!isCardFinded) {
-				resultMessage = resultMessage.replace(
-					`\nИгра: <b><a href="${url}">${game}</a></b>`,
-					"",
+			if (resultMessage.includes("Карточка")) {
+				// console.log("Отправляю результаты в телеграм");
+				logUpdate(
+					`Запрос данных с сайта: ${chalk.bold.yellow(
+						"tracksino.com",
+					)}, Результат: ${chalk.bold.bgGreen("отправка в телеграм")}`,
 				);
+				await telegram.sendMessage(resultMessage);
+			} else {
+				logUpdate(
+					`Запрос данных с сайта: ${chalk.bold.yellow(
+						"tracksino.com",
+					)}, Результат: ${chalk.bold.bgMagenta("не найдено")}`,
+				);
+				// console.log("Нет результатов");
 			}
-		}
-		if (resultMessage.includes("Карточка")) {
-			// console.log("Отправляю результаты в телеграм");
-			logUpdate(
-				`Запрос данных с сайта: ${chalk.bold.yellow(
-					"tracksino.com",
-				)}, Результат: ${chalk.bold.bgGreen("отправка в телеграм")}`,
-			);
-			await telegram.sendMessage(resultMessage);
-		} else {
-			logUpdate(
-				`Запрос данных с сайта: ${chalk.bold.yellow(
-					"tracksino.com",
-				)}, Результат: ${chalk.bold.bgMagenta("не найдено")}`,
-			);
-			// console.log("Нет результатов");
+		} catch (err) {
+			console.log(err);
 		}
 	});
 
@@ -190,7 +196,7 @@ async function main() {
 
 				if (finded.length) {
 					const value = Math.min(...finded);
-					percents.push({ game, any: value });
+					percents.push({ game, any: value.toFixed(2) });
 				} else {
 					percents.push({ game, any: "100" });
 				}
@@ -225,7 +231,7 @@ async function main() {
 				}
 			}
 
-			if (percents.length === cardsLength) {
+			if (percents.length >= cardsLength) {
 				emitter.emit("complete", percents);
 			}
 		} catch (err) {
