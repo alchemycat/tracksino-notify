@@ -9,42 +9,105 @@ import Telegram from "./lib/Telegram.js";
 import { parse } from "node-html-parser";
 
 async function main() {
-	const __dirname = path.resolve();
-	const configPath = path.resolve(`${__dirname}/config.txt`);
-
-	if (!fs.existsSync(configPath))
-		return console.log("Не найден файл config.txt");
-
-	const configContent = fs.readFileSync(configPath, "utf8");
-
-	if (!configContent) return console.log("Файл config.txt пуст");
-
-	let list;
-
-	if (/\r/.test(configContent)) {
-		list = configContent.split("\r");
-	} else {
-		list = configContent.split("\n");
-	}
-
-	if (!list.length) return console.log("Файл config.txt пуст");
-
-	let config = {};
-	let gamesLength = 0;
+	const config = {};
 	let token = null;
 	let chatId = null;
 	let timeout = null;
+	let gamesLength = 0;
+
+	const __dirname = path.resolve();
+
+	const configPath = path.resolve(`${__dirname}/config.txt`);
+
+	if (!fs.existsSync(configPath))
+		return console.log(
+			`Ошибка: ${chalk.bold.red("Не найден файл config.txt")}`,
+		);
+
+	const configContent = fs.readFileSync(configPath, "utf8");
+
+	if (!configContent)
+		return console.log(`Ошибка: ${chalk.bold.red("файл config.txt пуст")}`);
+
+	let list;
+
+	list = configContent.split(/\r?\n/);
+
+	if (!list.length)
+		return console.log(`Ошибка: ${chalk.bold.red("файл config.txt пуст")}`);
+
+	list = list.filter((item) => item !== "");
+
+	function checkString(content, string) {
+		return content.includes(string);
+	}
+
+	let validation = null;
+
+	validation = checkString(configContent, "Таймаут:");
+	if (!validation)
+		return console.log(
+			`Ошибка: ${chalk.bold.red("Не указан таймаут в настройках")}`,
+		);
+	validation = checkString(configContent, "Токен:");
+	if (!validation)
+		return console.log(
+			`Ошибка: ${chalk.bold.red("Не указан телеграм токен в настройках")}`,
+		);
+	validation = checkString(configContent, "Чата:");
+	if (!validation)
+		return console.log(
+			`Ошибка: ${chalk.bold.red("Не указан ID чата телеграм в настройках")}`,
+		);
+	validation = checkString(configContent, "Название:");
+	if (!validation)
+		return console.log(
+			`Ошибка: ${chalk.bold.red("В файле настроек нету игр для проверки")}`,
+		);
 
 	for (const string of list) {
 		try {
 			if (string.includes("Токен")) {
-				token = string.split(":")[1] + ":" + string.split(":")[2];
+				token = string.split(":");
+				if (token.length != 3) {
+					return console.log(
+						`Ошибка: ${chalk.bold.red(
+							"Неправильный формат токена. Пример: Токен:123456789:ABCDEF",
+						)}`,
+					);
+				}
+				token = token[1] + ":" + token[2];
 			} else if (string.includes("Чата")) {
-				chatId = string.split(":")[1];
+				chatId = string.split(":");
+
+				if (chatId.length != 2 || !chatId[1]) {
+					return console.log(
+						`Ошибка: ${chalk.bold.red(
+							"Неправильный формат ID чата. Пример: ID-Чата:123456789",
+						)}`,
+					);
+				}
+
+				chatId = chatId[1];
 			} else if (string.includes("Таймаут")) {
-				timeout = string.split(":")[1];
+				timeout = string.split(":");
+				if (timeout.length != 2 || !timeout[1]) {
+					return console.log(
+						`Ошибка: ${chalk.bold.red(
+							"Неправильный формат таймаута. Пример: Таймаут:5",
+						)}`,
+					);
+				}
+				timeout = timeout[1];
 			} else {
 				let row = string.split(";");
+
+				if (row.length != 3)
+					return console.log(
+						`Ошибка: ${chalk.bold.red(
+							"Неправильный формат строки для игр. Пример: Название:Рандомая Игра;Карточки:1;Проценты:25",
+						)}`,
+					);
 
 				let colName = row[0].split(":")[1];
 
@@ -62,8 +125,56 @@ async function main() {
 						"https://tracksino.com/lightning-roulette?period=3hours";
 				}
 
-				let colCards = row[1].split(":")[1].split(",");
-				let colPercents = row[2].split(":")[1].split(",");
+				let colCards;
+				try {
+					colCards = row[1].split(":")[1].split(",");
+				} catch {
+					return console.log(
+						`Игра: ${chalk.bold.yellow(colName)} Ошибка: ${chalk.bold.red(
+							"не указаны карточки",
+						)}`,
+					);
+				}
+
+				if (!colCards.length || !colCards[0])
+					return console.log(
+						`Игра: ${chalk.bold.yellow(colName)} Ошибка: ${chalk.bold.red(
+							"не указаны карточки",
+						)}`,
+					);
+
+				colCards = colCards.map((item) => item.trim());
+				colCards = colCards.filter((item) => item !== "");
+
+				let colPercents;
+
+				try {
+					colPercents = row[2].split(":")[1].split(",");
+				} catch {
+					return console.log(
+						`Игра: ${chalk.bold.yellow(colName)} Ошибка: ${chalk.bold.red(
+							"не указаны проценты",
+						)}`,
+					);
+				}
+
+				if (!colPercents.length || !colPercents[0])
+					return console.log(
+						`Игра: ${chalk.bold.yellow(colName)} Ошибка: ${chalk.bold.red(
+							"не указаны проценты",
+						)}`,
+					);
+
+				colPercents = colPercents.map((item) => item.trim());
+				colPercents = colPercents.filter((item) => item !== "");
+				colPercents = colPercents.map((item) => parseFloat(item));
+
+				if (colCards.length != colPercents.length)
+					return console.log(
+						`Игра: ${chalk.bold.yellow(colName)} Ошибка: ${chalk.bold.red(
+							"не равное количество карточек и процентов",
+						)}`,
+					);
 
 				config[colName].cards = [];
 
@@ -78,13 +189,21 @@ async function main() {
 		}
 	}
 
-	if (!token) return console.log("Не указан телеграм токен");
+	if (!token)
+		return console.log(`Ошибка: ${chalk.bold.red("Не указан телеграм токен")}`);
 
-	if (!chatId) return console.log("Не указан ID чата телеграм");
+	if (!chatId)
+		return console.log(
+			`Ошибка: ${chalk.bold.red("Не указан ID чата телеграм")}`,
+		);
 
-	if (!timeout) return console.log("Не указан таймаут");
+	if (!timeout)
+		return console.log(`Ошибка: ${chalk.bold.red("Не указан таймаут")}`);
 
 	gamesLength = Object.keys(config).length;
+
+	if (!gamesLength)
+		return console.log(`Ошибка: ${chalk.bold.red("Не указаны игры")}`);
 
 	const telegram = new Telegram(token, chatId);
 	const emitter = new EventEmmiter();
@@ -94,10 +213,13 @@ async function main() {
 	let requests = [];
 
 	emitter.on("complete", async (result) => {
-		if (!result.length)
+		if (!Array.isArray(result) || !result.length) {
 			return console.log(
 				chalk.bold.red("Подходящих результатов для игр не найдено"),
 			);
+		}
+		// if (!result.length)
+
 		try {
 			let resultMessage = "Подходящие карточки:";
 			for (const game in games) {
@@ -156,7 +278,11 @@ async function main() {
 					if (response.status === 200) {
 						callback(response.data, cards, game);
 					} else {
-						throw new Error(`Server returned status code ${response.status}`);
+						throw new Error(
+							`Игра: ${game} Ошибка: статус код ${chalk.bold.red(
+								response.status,
+							)}`,
+						);
 					}
 				})
 				.catch((err) => {
@@ -173,7 +299,9 @@ async function main() {
 			requests.push(true);
 
 			let root;
+
 			root = parse(data);
+
 			let title = root.querySelector(".card-title");
 
 			if (title.textContent === "No Data Found") {
@@ -242,7 +370,7 @@ async function main() {
 				emitter.emit("complete", percents);
 			}
 		} catch (err) {
-			console.log(err);
+			// console.log(err);
 			console.log(
 				`Игра: ${chalk.bold.yellow(
 					game ? game : "ошибка названия",
