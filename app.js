@@ -213,38 +213,48 @@ async function main() {
 	let requests = [];
 
 	emitter.on("complete", async (result) => {
-		if (!Array.isArray(result) || !result.length) {
-			return console.log(
-				chalk.bold.red("Подходящих результатов для игр не найдено"),
-			);
-		}
-		// if (!result.length)
-
 		try {
+			if (!Array.isArray(result) || !result.length) {
+				return console.log(
+					chalk.bold.red("Подходящих результатов для игр не найдено"),
+				);
+			}
+
 			let resultMessage = "Подходящие карточки:";
 			for (const game in games) {
 				const { url, cards } = games[game];
 				const gameResult = result.filter((item) => item.game === game);
+
 				resultMessage += `\nИгра: <b><a href="${url}">${game}</a></b>`;
 				let isCardFinded = false;
 
-				for (let i = 0; i < cards.length; i++) {
-					const card = cards[i];
-
-					let { name, limit } = card;
-
-					let cardPercent = gameResult.find((item) => item[name]);
-
-					if (!cardPercent) continue;
-
-					cardPercent = cardPercent[name];
-
-					limit = parseFloat(limit);
-					cardPercent = parseFloat(cardPercent);
-
-					if (cardPercent < limit) {
+				if (game === "Lightning Roulette") {
+					gameResult.forEach((item) => {
+						const keys = Object.keys(item);
+						const targetKey = keys.filter((key) => key != "game");
+						const cardPercent = item[targetKey];
 						isCardFinded = true;
-						resultMessage += `\nКарточка: "<b>${name}</b>" Желаемый: <b>${cardPercent}%</b>`;
+						resultMessage += `\nКарточка: "<b>${targetKey}</b>" Желаемый: <b>${cardPercent}%</b>`;
+					});
+				} else {
+					for (let i = 0; i < cards.length; i++) {
+						const card = cards[i];
+
+						let { name, limit } = card;
+
+						let cardPercent = gameResult.find((item) => item[name]);
+
+						if (!cardPercent) continue;
+
+						cardPercent = cardPercent[name];
+
+						limit = limit;
+						cardPercent = parseFloat(cardPercent);
+
+						if (cardPercent < limit) {
+							isCardFinded = true;
+							resultMessage += `\nКарточка: "<b>${name}</b>" Желаемый: <b>${cardPercent}%</b>`;
+						}
 					}
 				}
 
@@ -315,25 +325,29 @@ async function main() {
 					if (!Array.isArray(rates) || !rates.length)
 						throw new Error(`Rates not found`);
 
-					let finded = [];
+					// let finded = [];
 
 					rates.pop(); // remove last element
 
 					if (!rates.length) throw new Error(`Rates not found`);
 
 					for (const rate of rates) {
-						let rateValue = rate.textContent;
-						let percent = parseFloat(rateValue); //finded percent
-						let myPercent = parseFloat(cards[0].limit); // config percent
+						const parent = rate.parentNode;
+						const name = parent.querySelector(".num").textContent;
+						const rateValue = rate.textContent;
+						const percent = parseFloat(rateValue); //finded percent
+						const myPercent = cards[0].limit; // config percent
+
 						if (percent < myPercent) {
-							finded.push(percent);
+							percents.push({ game, [name]: percent.toFixed(2) });
+							// finded.push(percent);
 						}
 					}
 
-					if (finded.length) {
-						const value = Math.min(...finded);
-						percents.push({ game, any: value.toFixed(2) });
-					}
+					// if (finded.length) {
+					// const value = Math.min(...finded);
+					// percents.push({ game, any: value.toFixed(2) });
+					// }
 				} else {
 					for (const card of cards) {
 						let target = null;
