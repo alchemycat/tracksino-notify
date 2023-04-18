@@ -98,6 +98,7 @@ async function main() {
 
 	emitter.on("complete", async (result) => {
 		if (!result.length) return console.log("Нет данных");
+
 		try {
 			let resultMessage = "Подходящие карточки:";
 			for (const game in games) {
@@ -137,20 +138,10 @@ async function main() {
 				}
 			}
 			if (resultMessage.includes("Карточка")) {
-				// console.log("Отправляю результаты в телеграм");
-				logUpdate(
-					`Запрос данных с сайта: ${chalk.bold.yellow(
-						"tracksino.com",
-					)}, Результат: ${chalk.bold.bgGreen("отправка в телеграм")}`,
-				);
+				console.log(chalk.bold.green(`Отправляю результаты в телеграм`));
 				await telegram.sendMessage(resultMessage);
 			} else {
-				logUpdate(
-					`Запрос данных с сайта: ${chalk.bold.yellow(
-						"tracksino.com",
-					)}, Результат: ${chalk.bold.bgMagenta("не найдено")}`,
-				);
-				// console.log("Нет результатов");
+				console.log(chalk.bold.red("Подходящих результатов для игр не найдено"));
 			}
 		} catch (err) {
 			console.log(err);
@@ -160,7 +151,7 @@ async function main() {
 	function makeRequest(games, callback) {
 		for (const game in games) {
 			const { url, cards } = games[game];
-
+			console.log(`Запрос данных для игры: ${chalk.bold.yellow(game)}`);
 			axios
 				.get(url)
 				.then((response) => {
@@ -177,10 +168,24 @@ async function main() {
 	}
 
 	function handleResponse(data, cards, game) {
-		let root;
-
 		try {
+			let root;
 			root = parse(data);
+			let title = root.querySelector(".card-title");
+
+			if (title.textContent === "No Data Found") {
+				console.log(`Нет данных за выбранный период, игра: ${chalk.bold.yellow(game)} `);
+				cardsLength = cardsLength - cards.length;
+				return;
+				// return logUpdate(
+				// 	`Запрос данных для игры ${chalk.bold.yellow(
+				// 		`${game}`,
+				// 	)}, Результат: ${chalk.bold.bgYellow(
+				// 		`нет данных за выбранный период`,
+				// 	)}`,
+				// );
+			}
+
 			if (game === "Lightning Roulette") {
 				const rates = root.querySelectorAll(".rate");
 				let finded = [];
@@ -210,7 +215,10 @@ async function main() {
 
 					const image = root.querySelector(`img[alt="${target}"]`);
 
-					if (!image) throw new Error("Image not found");
+					if (!image) {
+						console.log(target);
+						throw new Error("Image not found");
+					}
 
 					const parent = image.parentNode;
 
@@ -243,11 +251,6 @@ async function main() {
 	console.log("Чекер запущен");
 
 	setInterval(() => {
-		logUpdate(
-			`Запрос данных с сайта: ${chalk.bold.yellow(
-				"tracksino.com",
-			)}, Результат: ${chalk.bold.bgYellow("ожидайте...")}`,
-		);
 		// console.log("Запрос данных с сайта: tracksino.com");
 		percents = [];
 		makeRequest(games, handleResponse);
