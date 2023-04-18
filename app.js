@@ -2,15 +2,11 @@ import axios from "axios";
 import fs from "fs";
 import path from "path";
 import EventEmmiter from "events";
-import logUpdate from "log-update";
 import chalk from "chalk";
 
 import Telegram from "./lib/Telegram.js";
 
 import { parse } from "node-html-parser";
-
-//?period=1hour
-//?period=3hour
 
 async function main() {
 	const __dirname = path.resolve();
@@ -34,7 +30,7 @@ async function main() {
 	if (!list.length) return console.log("Файл config.txt пуст");
 
 	let config = {};
-	let cardsLength = 0;
+	let gamesLength = 0;
 	let token = null;
 	let chatId = null;
 	let timeout = null;
@@ -76,8 +72,6 @@ async function main() {
 					const limit = colPercents[i];
 					config[colName].cards.push({ name, limit });
 				}
-
-				cardsLength += config[colName].cards.length;
 			}
 		} catch (err) {
 			console.log(err);
@@ -90,15 +84,20 @@ async function main() {
 
 	if (!timeout) return console.log("Не указан таймаут");
 
+	gamesLength = Object.keys(config).length;
+
 	const telegram = new Telegram(token, chatId);
 	const emitter = new EventEmmiter();
 
 	const games = config;
 	let percents = [];
+	let requests = [];
 
 	emitter.on("complete", async (result) => {
-		if (!result.length) return console.log("Нет данных");
-
+		if (!result.length)
+			return console.log(
+				chalk.bold.red("Подходящих результатов для игр не найдено"),
+			);
 		try {
 			let resultMessage = "Подходящие карточки:";
 			for (const game in games) {
@@ -124,9 +123,6 @@ async function main() {
 					if (cardPercent < limit) {
 						isCardFinded = true;
 						resultMessage += `\nКарточка: "<b>${name}</b>" Желаемый: <b>${cardPercent}%</b>`;
-						// console.log(
-						// 	`Игра: ${game} Карточка:${name} Желаемый: ${cardPercent}%`,
-						// );
 					}
 				}
 
@@ -141,7 +137,9 @@ async function main() {
 				console.log(chalk.bold.green(`Отправляю результаты в телеграм`));
 				await telegram.sendMessage(resultMessage);
 			} else {
-				console.log(chalk.bold.red("Подходящих результатов для игр не найдено"));
+				console.log(
+					chalk.bold.red("Подходящих результатов для игр не найдено"),
+				);
 			}
 		} catch (err) {
 			console.log(err);
@@ -169,77 +167,72 @@ async function main() {
 
 	function handleResponse(data, cards, game) {
 		try {
+			requests.push(true);
+
 			let root;
 			root = parse(data);
 			let title = root.querySelector(".card-title");
 
 			if (title.textContent === "No Data Found") {
-				console.log(`Нет данных за выбранный период, игра: ${chalk.bold.yellow(game)} `);
-				cardsLength = cardsLength - cards.length;
-				return;
-				// return logUpdate(
-				// 	`Запрос данных для игры ${chalk.bold.yellow(
-				// 		`${game}`,
-				// 	)}, Результат: ${chalk.bold.bgYellow(
-				// 		`нет данных за выбранный период`,
-				// 	)}`,
-				// );
-			}
-
-			if (game === "Lightning Roulette") {
-				const rates = root.querySelectorAll(".rate");
-				let finded = [];
-				rates.pop(); // remove last element
-				for (const rate of rates) {
-					let rateValue = rate.textContent;
-					let percent = parseFloat(rateValue); //finded percent
-					let myPercent = parseFloat(cards[0].limit); // config percent
-					if (percent < myPercent) {
-						finded.push(percent);
-					}
-				}
-
-				if (finded.length) {
-					const value = Math.min(...finded);
-					percents.push({ game, any: value.toFixed(2) });
-				} else {
-					percents.push({ game, any: "100" });
-				}
+				console.log(
+					`Нет данных за выбранный период, игра: ${chalk.bold.yellow(game)} `,
+				);
 			} else {
-				for (const card of cards) {
-					let target = null;
-
-					card.name.includes("Bonus")
-						? (target = `${card.name} Segment`)
-						: (target = `${game} ${card.name} Segment`);
-
-					const image = root.querySelector(`img[alt="${target}"]`);
-
-					if (!image) {
-						console.log(target);
-						throw new Error("Image not found");
+				if (game === "Lightning Roulette") {
+					const rates = root.querySelectorAll(".rate");
+					let finded = [];
+					rates.pop(); // remove last element
+					for (const rate of rates) {
+						let rateValue = rate.textContent;
+						let percent = parseFloat(rateValue); //finded percent
+						let myPercent = parseFloat(cards[0].limit); // config percent
+						if (percent < myPercent) {
+							finded.push(percent);
+						}
 					}
 
-					const parent = image.parentNode;
+					if (finded.length) {
+						const value = Math.min(...finded);
+						percents.push({ game, any: value.toFixed(2) });
+					} else {
+						percents.push({ game, any: "100" });
+					}
+				} else {
+					for (const card of cards) {
+						let target = null;
 
-					if (!parent) throw new Error("Parent not found");
+						card.name.includes("Bonus")
+							? (target = `${card.name} Segment`)
+							: (target = `${game} ${card.name} Segment`);
 
-					const title = parent.querySelector(".title");
+						const image = root.querySelector(`img[alt="${target}"]`);
 
-					if (!title) throw new Error("Title not found");
+						if (!image) {
+							console.log(target);
+							throw new Error("Image not found");
+						}
 
-					let percent = title.textContent;
+						const parent = image.parentNode;
 
-					if (!percent || !percent.includes("%"))
-						throw new Error("Percent not found");
+						if (!parent) throw new Error("Parent not found");
 
-					percent = parseFloat(percent).toFixed(2);
+						const title = parent.querySelector(".title");
 
-					percents.push({ game, [card.name]: percent });
+						if (!title) throw new Error("Title not found");
+
+						let percent = title.textContent;
+
+						if (!percent || !percent.includes("%"))
+							throw new Error("Percent not found");
+
+						percent = parseFloat(percent).toFixed(2);
+
+						percents.push({ game, [card.name]: percent });
+					}
 				}
 			}
 
-			if (percents.length >= cardsLength) {
+			if (requests.length >= gamesLength) {
 				emitter.emit("complete", percents);
 			}
 		} catch (err) {
@@ -251,8 +244,8 @@ async function main() {
 	console.log("Чекер запущен");
 
 	setInterval(() => {
-		// console.log("Запрос данных с сайта: tracksino.com");
 		percents = [];
+		requests = [];
 		makeRequest(games, handleResponse);
 	}, timeout * 1000);
 }
