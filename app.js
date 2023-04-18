@@ -160,6 +160,7 @@ async function main() {
 					}
 				})
 				.catch((err) => {
+					console.log(err);
 					callback(null); // Прекратить повторы и вернуть null
 				});
 		}
@@ -167,6 +168,8 @@ async function main() {
 
 	function handleResponse(data, cards, game) {
 		try {
+			if (!data) throw new Error("No data returned");
+
 			requests.push(true);
 
 			let root;
@@ -180,8 +183,16 @@ async function main() {
 			} else {
 				if (game === "Lightning Roulette") {
 					const rates = root.querySelectorAll(".rate");
+
+					if (!Array.isArray(rates) || !rates.length)
+						throw new Error(`Rates not found`);
+
 					let finded = [];
+
 					rates.pop(); // remove last element
+
+					if (!rates.length) throw new Error(`Rates not found`);
+
 					for (const rate of rates) {
 						let rateValue = rate.textContent;
 						let percent = parseFloat(rateValue); //finded percent
@@ -194,8 +205,6 @@ async function main() {
 					if (finded.length) {
 						const value = Math.min(...finded);
 						percents.push({ game, any: value.toFixed(2) });
-					} else {
-						percents.push({ game, any: "100" });
 					}
 				} else {
 					for (const card of cards) {
@@ -207,10 +216,7 @@ async function main() {
 
 						const image = root.querySelector(`img[alt="${target}"]`);
 
-						if (!image) {
-							console.log(target);
-							throw new Error("Image not found");
-						}
+						if (!image) throw new Error("Image not found");
 
 						const parent = image.parentNode;
 
@@ -236,7 +242,12 @@ async function main() {
 				emitter.emit("complete", percents);
 			}
 		} catch (err) {
-			console.log(err.message);
+			console.log(err);
+			console.log(
+				`Игра: ${chalk.bold.yellow(
+					game ? game : "ошибка названия",
+				)} Ошибка: ${chalk.bold.red(err.message)}`,
+			);
 		}
 	}
 
